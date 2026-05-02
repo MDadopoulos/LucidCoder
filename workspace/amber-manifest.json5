@@ -1,0 +1,70 @@
+// AgentBeats registration manifest for LucidCoder
+// See: https://docs.agentbeats.dev/manifest/
+{
+  manifest_version: "0.1.0",
+
+  metadata: {
+    name: "LucidCoder",
+    description: "Self-disciplined coding agent for Terminal-Bench 2.0. Decompose -> plan (with checker) -> execute (with retry + anti-paralysis guard) -> verify (test run + anti-pattern grep + artifact check). Speaks terminal-bench-shell-v1 over A2A.",
+  },
+
+  config_schema: {
+    type: "object",
+    properties: {
+      google_api_key: {
+        type: "string",
+        secret: true,
+        description: "Gemini AI Studio API Key",
+      },
+      google_api_key_2: {
+        type: "string",
+        secret: true,
+        description: "Backup Gemini API Key 2",
+      },
+      google_api_key_3: {
+        type: "string",
+        secret: true,
+        description: "Backup Gemini API Key 3",
+      },
+      google_api_key_4: {
+        type: "string",
+        secret: true,
+        description: "Backup Gemini API Key 4",
+      },
+      google_api_key_5: {
+        type: "string",
+        secret: true,
+        description: "Backup Gemini API Key 5",
+      },
+    },
+    required: ["google_api_key"],
+    additionalProperties: false,
+  },
+
+  program: {
+    image: "ghcr.io/mdadopoulos/lucidcoder:latest",
+    entrypoint: ["python", "-m", "src.server"],
+    env: {
+      // Secrets sourced from config
+      GOOGLE_API_KEY:    "${config.google_api_key}",
+      GOOGLE_API_KEY_2:  "${config.google_api_key_2}",
+      GOOGLE_API_KEY_3:  "${config.google_api_key_3}",
+      GOOGLE_API_KEY_4:  "${config.google_api_key_4}",
+      GOOGLE_API_KEY_5:  "${config.google_api_key_5}",
+
+      // Static configuration
+      MODEL_ID: "gemini-3.1-pro-preview",
+      LOG_LEVEL: "INFO",
+    },
+    network: {
+      endpoints: [
+        { name: "a2a_endpoint", port: 9009 },
+      ],
+    },
+  },
+
+  provides: {
+    a2a: { kind: "a2a", endpoint: "a2a_endpoint" },
+  },
+  exports: { a2a: "a2a" },
+}

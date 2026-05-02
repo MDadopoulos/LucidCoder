@@ -1,0 +1,12 @@
+.git/
+.github/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.env.*
+workspace/scratch/
+workspace/.venv/
+*.md
+!README.md

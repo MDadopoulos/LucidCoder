@@ -1,0 +1,19 @@
+# --- Web server / A2A ---
+fastapi>=0.115
+uvicorn[standard]>=0.32
+httpx>=0.28
+a2a-sdk[http-server]>=0.3.20,<1.0
+
+# --- LLM ---
+google-genai>=1.0.0
+langchain-google-genai>=4.2.1
+
+# --- Utilities ---
+python-dotenv>=1.0
+pydantic>=2.10
+tenacity>=9.0
+
+# --- Testing ---
+pytest>=8.0
+pytest-anyio
+asgi-lifespan>=2.1
