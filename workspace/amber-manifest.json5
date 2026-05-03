@@ -8,43 +8,55 @@
     description: "Self-disciplined coding agent for Terminal-Bench 2.0. Decompose -> plan (with checker) -> execute (with retry + anti-paralysis guard) -> verify (test run + anti-pattern grep + artifact check). Speaks terminal-bench-shell-v1 over A2A.",
   },
 
-  // Vertex AI authentication: a single secret holds the JSON-encoded
-  // service-account key. The container writes it to disk on startup and points
-  // GOOGLE_APPLICATION_CREDENTIALS at the file. Project/location are static.
+  // Auth: Vertex AI Express mode — single API key, optional rotation slots.
+  // Backed by Vertex (per-project quota & billing) but with the Gemini-Developer
+  // UX (no SA JSON, no ADC). Confirmed in google-genai SDK
+  // (Client(vertexai=True, api_key=...)).
   config_schema: {
     type: "object",
     properties: {
-      google_application_credentials_json: {
+      google_api_key: {
         type: "string",
         secret: true,
-        description: "JSON-encoded service-account key with Vertex AI User role",
+        description: "Vertex AI Express API key (primary)",
       },
-      google_cloud_project: {
+      google_api_key_2: {
         type: "string",
-        secret: false,
-        description: "GCP project ID (e.g. 'my-project-123')",
+        secret: true,
+        description: "Backup Vertex Express API key 2",
       },
-      google_cloud_location: {
+      google_api_key_3: {
         type: "string",
-        secret: false,
-        description: "Vertex AI region (default: 'global')",
+        secret: true,
+        description: "Backup Vertex Express API key 3",
+      },
+      google_api_key_4: {
+        type: "string",
+        secret: true,
+        description: "Backup Vertex Express API key 4",
+      },
+      google_api_key_5: {
+        type: "string",
+        secret: true,
+        description: "Backup Vertex Express API key 5",
       },
     },
-    required: ["google_application_credentials_json", "google_cloud_project"],
+    required: ["google_api_key"],
     additionalProperties: false,
   },
 
   program: {
     image: "ghcr.io/mdadopoulos/lucidcoder:latest",
-    entrypoint: ["/home/agent/workspace/entrypoint.sh"],
+    entrypoint: ["python", "-m", "src.server"],
     env: {
-      // Vertex AI credentials. The entrypoint writes the JSON to /tmp/sa.json
-      // and exports GOOGLE_APPLICATION_CREDENTIALS for google-genai's ADC chain.
-      GOOGLE_APPLICATION_CREDENTIALS_JSON: "${config.google_application_credentials_json}",
-      GOOGLE_CLOUD_PROJECT:                "${config.google_cloud_project}",
-      GOOGLE_CLOUD_LOCATION:               "${config.google_cloud_location}",
+      // Secrets
+      GOOGLE_API_KEY:    "${config.google_api_key}",
+      GOOGLE_API_KEY_2:  "${config.google_api_key_2}",
+      GOOGLE_API_KEY_3:  "${config.google_api_key_3}",
+      GOOGLE_API_KEY_4:  "${config.google_api_key_4}",
+      GOOGLE_API_KEY_5:  "${config.google_api_key_5}",
 
-      // Static configuration
+      // Static
       MODEL_ID: "gemini-3.1-pro-preview",
       LOG_LEVEL: "INFO",
     },

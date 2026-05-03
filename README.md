@@ -83,22 +83,21 @@ LucidCoder/
 
 ## Configuration
 
-| Variable                          | Default                  | Purpose                                                |
-|-----------------------------------|--------------------------|--------------------------------------------------------|
-| `GOOGLE_CLOUD_PROJECT` ★          | —                        | GCP project ID with Vertex AI API enabled (required)   |
-| `GOOGLE_CLOUD_LOCATION`           | `global`                 | Vertex AI region                                       |
-| `GOOGLE_APPLICATION_CREDENTIALS`★ | —                        | Path to service-account JSON (or use ADC locally)      |
-| `MODEL_ID`                        | `gemini-3.1-pro-preview` | Vertex Gemini model used by all four stages            |
-| `SERVER_PORT`                     | `9009`                   | A2A server port                                        |
-| `SERVER_HOST`                     | `0.0.0.0`                | A2A server bind                                        |
-| `LOG_LEVEL`                       | `INFO`                   | Python logging level                                   |
-| `SCRATCH_DIR`                     | `workspace/scratch`      | Per-session scratch root                               |
+| Variable                | Default                  | Purpose                                                |
+|-------------------------|--------------------------|--------------------------------------------------------|
+| `GOOGLE_API_KEY` ★      | —                        | Vertex AI Express API key (required)                   |
+| `GOOGLE_API_KEY_2..5` ★ | —                        | Backup keys for rotation under quota pressure          |
+| `MODEL_ID`              | `gemini-3.1-pro-preview` | Vertex Gemini model used by all four stages            |
+| `SERVER_PORT`           | `9009`                   | A2A server port                                        |
+| `SERVER_HOST`           | `0.0.0.0`                | A2A server bind                                        |
+| `LOG_LEVEL`             | `INFO`                   | Python logging level                                   |
+| `SCRATCH_DIR`           | `workspace/scratch`      | Per-session scratch root                               |
 
-Auth uses Vertex AI's standard ADC chain. Locally, run
-`gcloud auth application-default login` once and you don't need to set
-`GOOGLE_APPLICATION_CREDENTIALS`. In Docker / AgentBeats, supply the SA key
-as JSON via the `google_application_credentials_json` config field — the
-container's `entrypoint.sh` materialises it to a file and points ADC at it.
+Auth uses **Vertex AI Express mode** — a single API key (no service-account
+JSON, no ADC, no project ID). The key is backed by Vertex (per-project quota
+and billing) but the UX matches the Gemini Developer API. Get one from the
+Google Cloud console under Vertex AI → API keys. Drop it into
+`workspace/.env` for local runs, or paste it into the AgentBeats config.
 
 ---
 
@@ -110,7 +109,7 @@ python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\activate 
 pip install -r requirements.txt
 
 cp .env.example .env
-# fill GOOGLE_CLOUD_PROJECT (and GOOGLE_APPLICATION_CREDENTIALS if not using ADC)
+# fill GOOGLE_API_KEY with your Vertex AI Express key
 
 python -m src.server                                  # listens on :9009
 ```
@@ -136,10 +135,7 @@ docker run --rm -p 9010:9010 -v /var/run/docker.sock:/var/run/docker.sock \
 
 ```bash
 docker build -t lucidcoder -f workspace/Dockerfile .
-docker run --rm -p 9009:9009 \
-  -e GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT \
-  -e GOOGLE_APPLICATION_CREDENTIALS_JSON="$(cat path/to/sa.json)" \
-  lucidcoder
+docker run --rm -p 9009:9009 -e GOOGLE_API_KEY=$GOOGLE_API_KEY lucidcoder
 ```
 
 The published image used by the AgentBeats manifest is `ghcr.io/mdadopoulos/lucidcoder:latest`.

@@ -41,23 +41,19 @@ PORT = int(os.environ.get("SERVER_PORT", "9009"))
 
 
 def _validate_startup() -> None:
-    if not os.environ.get("GOOGLE_CLOUD_PROJECT"):
+    if not os.environ.get("GOOGLE_API_KEY"):
         raise RuntimeError(
-            "GOOGLE_CLOUD_PROJECT env var is required for Vertex AI mode. "
-            "Also set GOOGLE_APPLICATION_CREDENTIALS to a service-account JSON, "
-            "or run `gcloud auth application-default login` locally."
+            "GOOGLE_API_KEY env var is required (Vertex AI Express mode). "
+            "Optionally set GOOGLE_API_KEY_2..GOOGLE_API_KEY_5 for rotation."
         )
 
 
-def _credentials_status() -> str:
-    """Best-effort credential check without forcing a model call."""
-    if not os.environ.get("GOOGLE_CLOUD_PROJECT"):
-        return "missing-project"
-    adc = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-    if adc and os.path.isfile(adc):
-        return "ok"
-    # Fall through to ADC chain (gcloud auth application-default login) — optimistic.
-    return "adc-fallback"
+def _key_count() -> int:
+    n = 1 if os.environ.get("GOOGLE_API_KEY") else 0
+    for i in range(2, 8):
+        if os.environ.get(f"GOOGLE_API_KEY_{i}"):
+            n += 1
+    return n
 
 
 async def health_endpoint(request: Request) -> JSONResponse:
@@ -65,9 +61,9 @@ async def health_endpoint(request: Request) -> JSONResponse:
         {
             "status": "ok",
             "model_id": os.environ.get("MODEL_ID", "gemini-3.1-pro-preview"),
-            "project": os.environ.get("GOOGLE_CLOUD_PROJECT", ""),
-            "location": os.environ.get("GOOGLE_CLOUD_LOCATION", "global"),
-            "credentials": _credentials_status(),
+            "auth_mode": "vertex-express",
+            "credentials": "ok" if os.environ.get("GOOGLE_API_KEY") else "missing",
+            "key_count": _key_count(),
         }
     )
 
