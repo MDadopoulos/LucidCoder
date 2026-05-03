@@ -153,23 +153,57 @@ class ModelClient:
 
 
 def _parse_json_lenient(raw: str) -> Any:
+    """Best-effort JSON extraction.
+
+    Handles:
+      - Plain JSON
+      - Fenced code blocks: ```json ... ``` (also matches when prose follows the fence)
+      - Models that emit ` ```json ` then content but forget the closing fence
+      - String-aware brace/bracket tracking so braces inside strings don't
+        confuse depth counting (the prior naive scanner failed on shell
+        commands like `cmd { something }` inside a JSON string).
+    """
     s = raw.strip()
-    fence = re.match(r"^```(?:json)?\s*\n?(.*?)\n?```\s*$", s, re.DOTALL)
-    if fence:
-        s = fence.group(1).strip()
+    # Strip an opening fence if present; we don't require a closing fence.
+    open_fence = re.match(r"^```(?:json|JSON)?\s*\n", s)
+    if open_fence:
+        s = s[open_fence.end():]
+        # Drop a trailing fence if there is one
+        m = re.search(r"\n```\s*$", s)
+        if m:
+            s = s[: m.start()]
+        s = s.strip()
     try:
         return json.loads(s)
     except json.JSONDecodeError:
         pass
+    # String-aware scanner: ignore braces inside JSON strings.
     for opener, closer in (("{", "}"), ("[", "]")):
         i = s.find(opener)
         if i < 0:
             continue
         depth = 0
+        in_str = False
+        escape = False
         for j in range(i, len(s)):
-            if s[j] == opener:
+            ch = s[j]
+            if in_str:
+                if escape:
+                    escape = False
+                    continue
+                if ch == "\\":
+                    escape = True
+                    continue
+                if ch == '"':
+                    in_str = False
+                    continue
+                continue
+            if ch == '"':
+                in_str = True
+                continue
+            if ch == opener:
                 depth += 1
-            elif s[j] == closer:
+            elif ch == closer:
                 depth -= 1
                 if depth == 0:
                     chunk = s[i:j + 1]

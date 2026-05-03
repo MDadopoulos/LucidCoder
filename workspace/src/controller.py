@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 # Tunables (env-overridable)
 MAX_FIX_ATTEMPTS = 3
-MAX_REPLANS = 1            # one replan after a verify failure (then we stop and report)
+MAX_REPLANS = 2            # up to two replans after verify/fix failures (then report)
 MAX_READ_ONLY_STREAK = 5
 MAX_VERIFY_ATTEMPTS = 2
 
