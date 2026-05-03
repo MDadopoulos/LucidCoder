@@ -1,9 +1,19 @@
-"""Gemini model adapter with API-key rotation and structured-output helpers.
+"""Gemini model adapter — Vertex AI Gemini 3.1 Pro.
 
-Defaults to gemini-3.1-pro-preview (orchestrator-grade). Falls through up to
-five GOOGLE_API_KEY_N keys on quota / rate-limit errors. Used by all four
-stages — there is no per-stage model dispatch in v1; the system prompt
-specialises behaviour.
+Uses the google-genai SDK in **Vertex mode** (`vertexai=True`). Authentication
+is via Application Default Credentials (ADC): mount a service-account key as
+`GOOGLE_APPLICATION_CREDENTIALS=/path/to/sa.json`, or run `gcloud auth
+application-default login` locally. There is no `GOOGLE_API_KEY` rotation in
+Vertex mode — rate limits are per-project quota, not per-key. Retry logic
+remains for transient 5xx / 429 / quota errors with exponential backoff.
+
+Required env:
+  GOOGLE_CLOUD_PROJECT     GCP project ID
+  GOOGLE_CLOUD_LOCATION    e.g. "us-central1" or "global" (default: "global")
+  GOOGLE_APPLICATION_CREDENTIALS  path to a service-account JSON (or use ADC)
+
+Optional:
+  MODEL_ID                 defaults to "gemini-3.1-pro-preview"
 """
 
 from __future__ import annotations
@@ -21,18 +31,6 @@ logger = logging.getLogger(__name__)
 DEFAULT_MODEL = "gemini-3.1-pro-preview"
 
 
-def _collect_api_keys() -> list[str]:
-    keys: list[str] = []
-    primary = os.environ.get("GOOGLE_API_KEY", "").strip()
-    if primary:
-        keys.append(primary)
-    for i in range(2, 8):
-        k = os.environ.get(f"GOOGLE_API_KEY_{i}", "").strip()
-        if k and k not in keys:
-            keys.append(k)
-    return keys
-
-
 def _is_retryable(err: Exception) -> bool:
     msg = str(err).lower()
     return any(s in msg for s in (
@@ -41,31 +39,24 @@ def _is_retryable(err: Exception) -> bool:
     ))
 
 
-_KEY_INDEX = 0
-
-
 class ModelClient:
-    """Thin wrapper around the google-genai SDK with key rotation + JSON parse."""
+    """Thin wrapper around google-genai (Vertex mode) with retry + JSON parse."""
 
     def __init__(self, model_id: str | None = None):
         from google import genai  # type: ignore
 
         self.model_id = model_id or os.environ.get("MODEL_ID", DEFAULT_MODEL)
-        self._keys = _collect_api_keys()
-        if not self._keys:
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT", "").strip()
+        location = os.environ.get("GOOGLE_CLOUD_LOCATION", "global").strip() or "global"
+        if not project:
             raise RuntimeError(
-                "No GOOGLE_API_KEY set. Provide GOOGLE_API_KEY (and optionally "
-                "GOOGLE_API_KEY_2..GOOGLE_API_KEY_5 for rotation)."
+                "GOOGLE_CLOUD_PROJECT env var is required for Vertex AI mode. "
+                "Also set GOOGLE_APPLICATION_CREDENTIALS to a service-account JSON, "
+                "or run `gcloud auth application-default login` locally."
             )
-        self._genai_module = genai
-        self._client_cache: dict[int, Any] = {}
-
-    def _client_for(self, key_idx: int):
-        if key_idx not in self._client_cache:
-            self._client_cache[key_idx] = self._genai_module.Client(
-                api_key=self._keys[key_idx]
-            )
-        return self._client_cache[key_idx]
+        self._client = genai.Client(vertexai=True, project=project, location=location)
+        self.project = project
+        self.location = location
 
     def generate(
         self,
@@ -76,13 +67,10 @@ class ModelClient:
         max_output_tokens: int = 4096,
         max_attempts: int = 6,
     ) -> str:
-        global _KEY_INDEX
         last_err: Exception | None = None
         for attempt in range(max_attempts):
-            key_idx = _KEY_INDEX % len(self._keys)
-            client = self._client_for(key_idx)
             try:
-                resp = client.models.generate_content(
+                resp = self._client.models.generate_content(
                     model=self.model_id,
                     contents=[{"role": "user", "parts": [{"text": user}]}],
                     config={
@@ -93,7 +81,6 @@ class ModelClient:
                 )
                 text = getattr(resp, "text", None) or ""
                 if not text:
-                    # Some responses put content under candidates[0].content.parts
                     cands = getattr(resp, "candidates", None) or []
                     for c in cands:
                         content = getattr(c, "content", None)
@@ -106,15 +93,14 @@ class ModelClient:
             except Exception as e:  # noqa: BLE001
                 last_err = e
                 logger.warning(
-                    "model.generate failed (attempt %d, key idx %d): %s",
-                    attempt + 1, key_idx, e,
+                    "Vertex model.generate failed (attempt %d/%d): %s",
+                    attempt + 1, max_attempts, e,
                 )
                 if _is_retryable(e):
-                    _KEY_INDEX += 1
                     time.sleep(min(2 ** attempt, 15))
                     continue
                 raise
-        raise RuntimeError(f"Model call exhausted retries: {last_err}")
+        raise RuntimeError(f"Vertex model call exhausted retries: {last_err}")
 
     def generate_json(
         self,

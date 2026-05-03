@@ -13,12 +13,16 @@ WORKDIR /home/agent/workspace
 COPY workspace/requirements.txt ./
 RUN pip install -r requirements.txt
 
-# Source
+# Source + entrypoint (entrypoint materialises the Vertex SA JSON at runtime)
 COPY workspace/src/ ./src/
+COPY workspace/entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
 ENV SERVER_HOST=0.0.0.0 \
     SERVER_PORT=9009 \
     MODEL_ID=gemini-3.1-pro-preview \
+    GOOGLE_CLOUD_LOCATION=global \
+    GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa.json \
     LOG_LEVEL=INFO
 
 RUN mkdir -p /home/agent/workspace/scratch \
@@ -27,4 +31,4 @@ USER agent
 
 EXPOSE 9009
 
-ENTRYPOINT ["python", "-m", "src.server"]
+ENTRYPOINT ["/home/agent/workspace/entrypoint.sh"]
