@@ -57,15 +57,32 @@
     image: "ghcr.io/mdadopoulos/lucidcoder:latest",
     entrypoint: ["python", "-m", "src.server"],
     env: {
-      // Secrets
-      GOOGLE_API_KEY:    "${config.google_api_key}",
-      GOOGLE_API_KEY_2:  "${config.google_api_key_2}",
-      GOOGLE_API_KEY_3:  "${config.google_api_key_3}",
-      GOOGLE_API_KEY_4:  "${config.google_api_key_4}",
-      GOOGLE_API_KEY_5:  "${config.google_api_key_5}",
+      // Required secret
+      GOOGLE_API_KEY: "${config.google_api_key}",
+
+      // Optional rotation keys — wrap each in `{ when, value }` so the env
+      // var is OMITTED when the user didn't fill that slot. Without `when`,
+      // Amber raises `manifest::optional_env_config` at validation and
+      // `interpolation error: config.X not found` at runtime.
+      GOOGLE_API_KEY_2: {
+        when:  "config.google_api_key_2",
+        value: "${config.google_api_key_2}",
+      },
+      GOOGLE_API_KEY_3: {
+        when:  "config.google_api_key_3",
+        value: "${config.google_api_key_3}",
+      },
+      GOOGLE_API_KEY_4: {
+        when:  "config.google_api_key_4",
+        value: "${config.google_api_key_4}",
+      },
+      GOOGLE_API_KEY_5: {
+        when:  "config.google_api_key_5",
+        value: "${config.google_api_key_5}",
+      },
 
       // Static
-      MODEL_ID: "gemini-3.1-pro-preview",
+      MODEL_ID:  "gemini-3.1-pro-preview",
       LOG_LEVEL: "INFO",
     },
     network: {
