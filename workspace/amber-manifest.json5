@@ -45,6 +45,14 @@
     additionalProperties: false,
   },
 
+  // Required for AgentBeats router to wire A2A traffic into this container.
+  // Both the canonical agent-template and the terminal-bench-green declare
+  // this slot — without it, the gateway gets `error=client error (Connect)`
+  // when trying to reach the purple's loopback :9009.
+  slots: {
+    proxy: { kind: "a2a", optional: true },
+  },
+
   program: {
     image: "ghcr.io/mdadopoulos/lucidcoder:latest",
     entrypoint: ["python", "-m", "src.server"],
