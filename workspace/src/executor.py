@@ -1,9 +1,14 @@
 """A2A AgentExecutor for LucidCoder.
 
-Boilerplate cribbed from the agent-template repo:
-- creates a Task on first message in a context
-- routes the inbound Message to LucidCoderAgent.run()
-- keeps the same Task open across turns (no .complete() until final)
+Each A2A Task = one terminal-bench-shell-v1 turn (task | exec_result -> exec_request | final).
+The terminal-bench-green messenger expects every turn to reach a terminal Task
+state (completed) before unblocking. Multi-turn FSM continuity is preserved at
+the **context_id** layer in src.session — not at the Task layer.
+
+If we receive a follow-up request on a context whose previous Task is already
+`completed`, that's NORMAL — the green has just opened a fresh Task to deliver
+the next exec_result. We must NOT reject it; we create a new Task on the same
+context and let the controller pick up where it left off.
 """
 
 from __future__ import annotations
@@ -26,14 +31,6 @@ from src.agent import LucidCoderAgent
 logger = logging.getLogger(__name__)
 
 
-TERMINAL_STATES = {
-    TaskState.completed,
-    TaskState.canceled,
-    TaskState.failed,
-    TaskState.rejected,
-}
-
-
 class LucidCoderExecutor(AgentExecutor):
     def __init__(self) -> None:
         self.agents: dict[str, LucidCoderAgent] = {}
@@ -43,26 +40,16 @@ class LucidCoderExecutor(AgentExecutor):
         if not msg:
             raise ServerError(error=InvalidRequestError(message="Missing message in request"))
 
-        task = context.current_task
-        if task and task.status.state in TERMINAL_STATES:
-            raise ServerError(
-                error=InvalidRequestError(
-                    message=f"Task {task.id} already processed (state: {task.status.state})"
-                )
-            )
-
-        if not task:
-            task = new_task(msg)
-            await event_queue.enqueue_event(task)
+        # Always start a new Task per turn. If `context.current_task` already
+        # exists in a terminal state, that's the green re-using the context_id
+        # for the next turn — we don't error, we just spin a fresh Task.
+        task = new_task(msg)
+        await event_queue.enqueue_event(task)
 
         context_id = task.context_id
         agent = self.agents.setdefault(context_id, LucidCoderAgent())
         updater = TaskUpdater(event_queue, task.id, context_id)
-
-        # Per-turn state transitions are emitted inside agent.run via the updater.
-        # We keep the Task in `working` state until LucidCoder emits a final.
-        if task.status.state not in (TaskState.working,):
-            await updater.start_work()
+        await updater.start_work()
 
         try:
             await agent.run(msg, updater, context_id=context_id)
